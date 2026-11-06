@@ -1,0 +1,20 @@
+# Secretos y entorno local
+.env
+.env.*
+!.env.example
+*.swp
+
+# Datos locales persistentes generados en tiempo de ejecución
+datos/
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+
+# Sistema
+.DS_Store
+.lgd-nfy0

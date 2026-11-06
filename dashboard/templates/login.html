@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Acceso - Seguridad RPi</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        darkbg: '#0e0f12',
+                        cardbg: '#14151a',
+                        cardheader: '#181a20',
+                        borderbg: '#27272a'
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-darkbg text-zinc-200 min-h-screen flex items-center justify-center p-4 font-sans antialiased">
+    <div class="max-w-sm w-full bg-cardbg border border-borderbg rounded-lg p-6 shadow-2xl">
+        
+        <div class="mb-6">
+            <div class="flex items-center gap-2 mb-1">
+                <span class="w-2.5 h-2.5 rounded-full bg-red-600 animate-pulse"></span>
+                <h1 class="text-base font-bold text-white uppercase tracking-wider">Seguridad RPi</h1>
+            </div>
+            <p class="text-xs text-zinc-400 font-mono">Control de Acceso</p>
+        </div>
+
+        {% if error %}
+        <div class="mb-4 p-2.5 rounded bg-red-950/40 border border-red-800/50 text-red-400 text-xs font-mono">
+            {{ error }}
+        </div>
+        {% endif %}
+
+        <form method="POST" action="/login" class="space-y-4">
+            <div>
+                <label for="password" class="block text-xs font-mono text-zinc-400 mb-1.5 uppercase">Clave de Seguridad</label>
+                <input type="password" id="password" name="password" required autofocus
+                    placeholder="Introduce la clave..."
+                    class="w-full px-3 py-2 bg-[#090a0d] border border-borderbg rounded text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-red-600 transition font-mono">
+            </div>
+
+            <button type="submit"
+                class="w-full py-2 bg-red-600 hover:bg-red-500 text-white font-medium rounded text-xs uppercase tracking-wider transition">
+                Ingresar
+            </button>
+        </form>
+
+        <div class="mt-5 pt-3 border-t border-borderbg text-center text-[11px] font-mono text-zinc-600">
+            Túnel Seguro Cloudflare
+        </div>
+    </div>
+</body>
+</html>

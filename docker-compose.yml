@@ -1,0 +1,48 @@
+services:
+  nodo:
+    build:
+      context: ./nodo
+    container_name: seguridad-nodo
+    restart: unless-stopped
+    privileged: true
+    network_mode: host
+    volumes:
+      - ./modelos:/modelos:ro
+      - ./datos:/datos
+      - /sys/class/thermal:/sys/class/thermal:ro
+    env_file:
+      - .env
+    environment:
+      - RTSP_URL=rtsp://127.0.0.1:8554/cam
+      - CARPETA_CAPTURAS=/datos/capturas
+      - CSV_RESULTADOS=/datos/resultados.csv
+      - DIR_MODELOS_IA=/modelos
+
+  dashboard:
+    build:
+      context: ./dashboard
+    container_name: seguridad-dashboard
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./dashboard/templates:/app/templates:ro
+      - ./datos:/datos:ro
+      - /sys/class/thermal:/sys/class/thermal:ro
+      - /proc/meminfo:/proc/meminfo:ro
+    env_file:
+      - .env
+    environment:
+      - MEDIAMTX_HLS_URL=http://127.0.0.1:8888
+    depends_on:
+      - nodo
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: seguridad-tunnel
+    restart: unless-stopped
+    network_mode: host
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    env_file:
+      - .env
+    depends_on:
+      - dashboard

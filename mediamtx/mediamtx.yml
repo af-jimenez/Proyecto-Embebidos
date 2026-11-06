@@ -1,0 +1,35 @@
+# ==============================================================================
+# Configuración Optimizada de MediaMTX para Raspberry Pi 3B+
+# ==============================================================================
+
+# Servidor RTSP interno (para captura de fotogramas en el nodo)
+rtsp: yes
+rtspAddress: :8554
+
+# Servidor HLS Optimizado (fMP4 con segmentos estables de 1 segundo)
+hls: yes
+hlsAddress: :8888
+hlsAlwaysRemux: yes
+hlsVariant: fmp4
+hlsSegmentCount: 7
+hlsSegmentDuration: 1s
+
+# Servidor WebRTC WHEP
+webrtc: yes
+webrtcAddress: :8889
+webrtcLocalUDPAddress: :8189
+
+# Configuración de rutas (Cámara CSI bajo demanda)
+paths:
+  cam:
+    source: rpiCamera
+    sourceOnDemand: yes
+    sourceOnDemandStartTimeout: 15s
+    sourceOnDemandCloseAfter: 45s
+    rpiCameraWidth: 1280
+    rpiCameraHeight: 720
+    rpiCameraFPS: 20
+    rpiCameraBitrate: 1200000
+    rpiCameraIDRPeriod: 20
+
+  all_others:

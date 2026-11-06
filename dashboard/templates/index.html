@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seguridad RPi - Monitor</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- HLS.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        darkbg: '#0e0f12',
+                        cardbg: '#14151a',
+                        cardheader: '#181a20',
+                        cardfooter: '#121317',
+                        borderbg: '#27272a'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .custom-scroll::-webkit-scrollbar { width: 4px; }
+        .custom-scroll::-webkit-scrollbar-track { background: #131417; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #2a2b32; border-radius: 2px; }
+        .custom-scroll::-webkit-scrollbar-thumb:hover { background: #dc2626; }
+    </style>
+</head>
+<body class="bg-darkbg text-zinc-200 min-h-screen flex flex-col font-sans antialiased">
+
+    <!-- HEADER MINIMALISTA -->
+    <header class="border-b border-borderbg bg-cardbg px-4 lg:px-8 py-3">
+        <div class="w-full flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <span class="w-2.5 h-2.5 rounded-full bg-red-600 animate-pulse"></span>
+                <span class="font-bold tracking-wider text-sm lg:text-base text-white uppercase">
+                    Seguridad RPi
+                </span>
+                <span class="text-zinc-600">|</span>
+                <span class="text-xs font-mono text-zinc-400">RPi 3B+ Edge AI</span>
+            </div>
+
+            <!-- Telemetría & Salir -->
+            <div class="flex items-center gap-4 text-xs font-mono">
+                <span class="text-zinc-400 hidden sm:inline">
+                    CPU: <span id="txt-temp" class="text-zinc-200 font-semibold">{{ telemetria.temperatura }}</span>
+                </span>
+                <span class="text-zinc-400 hidden sm:inline">
+                    RAM: <span id="txt-ram" class="text-zinc-200 font-semibold">{{ telemetria.memoria.usada }} ({{ telemetria.memoria.pct }}%)</span>
+                </span>
+                <span class="text-zinc-700 hidden sm:inline">/</span>
+                <a href="/logout" class="text-red-400 hover:text-red-300 transition font-sans font-medium text-xs px-2.5 py-1 rounded border border-red-950 bg-red-950/30 hover:bg-red-900/40">
+                    Salir
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- CUERPO PRINCIPAL (FULL WIDTH) -->
+    <main class="flex-1 w-full px-4 lg:px-8 py-5">
+
+        <!-- GRID PRINCIPAL: VIDEO EN VIVO (IZQ) + PANEL DE REGISTRO CON PESTAÑAS (DER) -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+
+            <!-- COLUMNA IZQUIERDA: VIDEO EN VIVO (~65%) -->
+            <div class="lg:col-span-7 xl:col-span-8 flex flex-col bg-cardbg border border-borderbg rounded-lg overflow-hidden shadow-xl">
+                
+                <!-- Barra Superior Video -->
+                <div class="px-4 py-2.5 bg-cardheader border-b border-borderbg flex items-center justify-between text-xs">
+                    <div class="flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-red-600"></span>
+                        <span class="font-semibold text-zinc-200 uppercase tracking-wide">Cámara en Vivo</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span id="hls-stats" class="font-mono text-zinc-400 text-[11px] hidden sm:inline">Buffer: 3.0s</span>
+                        <button onclick="iniciarVideo()" class="px-3 py-1 bg-red-600 hover:bg-red-500 text-white font-medium rounded text-xs transition">
+                            Conectar
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Reproductor -->
+                <div class="relative bg-black flex-1 min-h-[360px] md:min-h-[460px] flex items-center justify-center">
+                    <video id="videoPlayer" controls autoplay muted playsinline class="w-full h-full object-contain"></video>
+
+                    <div id="videoPlaceholder" class="absolute inset-0 bg-[#090a0d] flex items-center justify-center">
+                        <div class="text-center p-6 space-y-3">
+                            <p class="text-xs text-zinc-400">Cámara en reposo</p>
+                            <button onclick="iniciarVideo()" class="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded text-xs font-semibold tracking-wide transition shadow-lg shadow-red-950">
+                                Iniciar Transmisión
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- OSD Timestamp -->
+                    <div class="absolute top-3 left-3 bg-black/60 px-2 py-0.5 rounded text-[11px] font-mono text-zinc-400 border border-zinc-800/80 pointer-events-none">
+                        <span id="osd-clock">--</span>
+                    </div>
+                </div>
+
+                <!-- Footer Video -->
+                <div class="px-4 py-2 bg-cardfooter border-t border-borderbg flex justify-between items-center text-xs font-mono text-zinc-400">
+                    <span>HLS fMP4</span>
+                    <span id="txt-latencia" class="text-zinc-500">Retardo objetivo: 3.0s</span>
+                </div>
+            </div>
+
+            <!-- COLUMNA DERECHA: PANEL UNIFICADO CON PESTAÑAS (INCIDENTES / CAPTURAS) (~35%) -->
+            <div class="lg:col-span-5 xl:col-span-4 flex flex-col bg-cardbg border border-borderbg rounded-lg overflow-hidden shadow-xl">
+                
+                <!-- Barra de Pestañas -->
+                <div class="px-2 bg-cardheader border-b border-borderbg flex items-center justify-between text-xs">
+                    <div class="flex items-center gap-1">
+                        <button id="tab-btn-incidentes" onclick="cambiarTab('incidentes')" class="px-3 py-2.5 border-b-2 border-red-600 font-semibold text-white tracking-wide uppercase text-xs transition">
+                            Incidentes
+                        </button>
+                        <button id="tab-btn-capturas" onclick="cambiarTab('capturas')" class="px-3 py-2.5 border-b-2 border-transparent text-zinc-400 hover:text-zinc-200 font-medium tracking-wide uppercase text-xs transition">
+                            Capturas
+                        </button>
+                    </div>
+                    <span id="txt-contador-tab" class="font-mono text-[11px] text-zinc-400 pr-2">Cargando...</span>
+                </div>
+
+                <!-- Panel 1: Lista Vertical de Incidentes -->
+                <div id="panel-incidentes" class="flex flex-col">
+                    <div id="contenedor-eventos" class="max-h-[460px] overflow-y-auto custom-scroll divide-y divide-borderbg/70 p-1">
+                        <div class="p-6 text-center text-xs text-zinc-500 font-mono">
+                            Cargando incidentes...
+                        </div>
+                    </div>
+                    <div class="px-4 py-2 bg-cardfooter border-t border-borderbg text-[11px] font-mono text-zinc-500 flex justify-between">
+                        <span>Sincronizado Supabase</span>
+                        <span>Auto-refresco: 7s</span>
+                    </div>
+                </div>
+
+                <!-- Panel 2: Cuadrícula Scrollable de Capturas (Oculta por defecto) -->
+                <div id="panel-capturas" class="hidden flex-col">
+                    <div id="grid-capturas" class="p-2.5 grid grid-cols-2 gap-2.5 max-h-[460px] overflow-y-auto custom-scroll">
+                        <div class="col-span-2 py-8 text-center text-zinc-500 text-xs font-mono">
+                            Cargando capturas...
+                        </div>
+                    </div>
+                    <div class="px-4 py-2 bg-cardfooter border-t border-borderbg text-[11px] font-mono text-zinc-500 flex justify-between items-center">
+                        <span>Almacenamiento local RPi</span>
+                        <button onclick="cargarCapturas()" class="text-zinc-400 hover:text-zinc-200 text-[11px] font-mono">
+                            Actualizar
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- MODAL SIMPLE DE FOTOGRAFÍA -->
+    <div id="modal-foto" class="fixed inset-0 z-50 bg-black/85 hidden items-center justify-center p-4 backdrop-blur-sm" onclick="cerrarModal()">
+        <div class="max-w-3xl w-full bg-cardbg border border-borderbg rounded-lg overflow-hidden shadow-2xl" onclick="event.stopPropagation()">
+            <div class="p-3 border-b border-borderbg flex justify-between items-center bg-cardheader text-xs font-mono">
+                <span id="modal-titulo" class="text-zinc-200">Foto de Captura</span>
+                <button onclick="cerrarModal()" class="text-zinc-400 hover:text-white px-2 py-0.5 rounded hover:bg-zinc-800 transition">
+                    Cerrar
+                </button>
+            </div>
+            <div class="p-2 bg-black flex justify-center">
+                <img id="modal-img" src="" class="max-h-[75vh] w-auto object-contain rounded">
+            </div>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT -->
+    <script>
+        let hlsInstance = null;
+        let tabActual = 'incidentes';
+        let totalEventos = 0;
+        let totalCapturas = 0;
+
+        function cambiarTab(tab) {
+            tabActual = tab;
+            const btnInc = document.getElementById('tab-btn-incidentes');
+            const btnCap = document.getElementById('tab-btn-capturas');
+            const pnlInc = document.getElementById('panel-incidentes');
+            const pnlCap = document.getElementById('panel-capturas');
+            const contador = document.getElementById('txt-contador-tab');
+
+            if (tab === 'incidentes') {
+                btnInc.className = 'px-3 py-2.5 border-b-2 border-red-600 font-semibold text-white tracking-wide uppercase text-xs transition';
+                btnCap.className = 'px-3 py-2.5 border-b-2 border-transparent text-zinc-400 hover:text-zinc-200 font-medium tracking-wide uppercase text-xs transition';
+                pnlInc.classList.remove('hidden');
+                pnlCap.classList.add('hidden');
+                contador.textContent = `${totalEventos} registrados`;
+            } else {
+                btnCap.className = 'px-3 py-2.5 border-b-2 border-red-600 font-semibold text-white tracking-wide uppercase text-xs transition';
+                btnInc.className = 'px-3 py-2.5 border-b-2 border-transparent text-zinc-400 hover:text-zinc-200 font-medium tracking-wide uppercase text-xs transition';
+                pnlCap.classList.remove('hidden');
+                pnlInc.classList.add('hidden');
+                contador.textContent = `${totalCapturas} fotos`;
+                cargarCapturas();
+            }
+        }
+
+        function iniciarVideo() {
+            const video = document.getElementById('videoPlayer');
+            const placeholder = document.getElementById('videoPlaceholder');
+            const hlsUrl = '/stream/hls/cam/index.m3u8';
+
+            placeholder.classList.add('hidden');
+
+            if (Hls.isSupported()) {
+                if (hlsInstance) hlsInstance.destroy();
+                hlsInstance = new Hls({
+                    enableWorker: true,
+                    lowLatencyMode: false,
+                    liveSyncDuration: 3.0,
+                    liveMaxLatencyDuration: 6.0,
+                    maxBufferLength: 6,
+                    maxMaxBufferLength: 10,
+                    backBufferLength: 3,
+                    manifestLoadingTimeOut: 15000,
+                    levelLoadingTimeOut: 15000,
+                    fragLoadingTimeOut: 20000,
+                });
+                hlsInstance.loadSource(hlsUrl);
+                hlsInstance.attachMedia(video);
+                hlsInstance.on(Hls.Events.MANIFEST_PARSED, function () {
+                    video.play().catch(e => console.log('Autoplay blocked:', e));
+                });
+                hlsInstance.on(Hls.Events.ERROR, function(event, data) {
+                    if (data.fatal) {
+                        console.log('Error HLS:', data.type);
+                        setTimeout(() => hlsInstance.loadSource(hlsUrl), 2000);
+                    }
+                });
+
+                setInterval(() => {
+                    if (video && !video.paused && video.buffered.length > 0) {
+                        const bufferAhead = (video.buffered.end(video.buffered.length - 1) - video.currentTime).toFixed(1);
+                        const statsEl = document.getElementById('hls-stats');
+                        if (statsEl) statsEl.textContent = `Buffer: ${bufferAhead}s`;
+                    }
+                }, 1000);
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                video.src = hlsUrl;
+                video.addEventListener('loadedmetadata', function () {
+                    video.play();
+                });
+            }
+        }
+
+        async function cargarEventos() {
+            try {
+                const res = await fetch('/api/eventos');
+                const data = await res.json();
+                const container = document.getElementById('contenedor-eventos');
+                const items = data.data || [];
+                totalEventos = items.length;
+
+                if (tabActual === 'incidentes') {
+                    document.getElementById('txt-contador-tab').textContent = `${totalEventos} registrados`;
+                }
+
+                if (items.length === 0) {
+                    container.innerHTML = '<div class="p-6 text-center text-xs text-zinc-500 font-mono">Sin incidentes registrados.</div>';
+                    return;
+                }
+
+                container.innerHTML = items.map(e => {
+                    const pct = Math.round((e.confianza_ia || 0) * 100);
+                    const fecha = (e.created_at || '').substring(0, 19).replace('T', ' ');
+                    const hora = fecha.length >= 19 ? fecha.substring(11) : fecha;
+                    const imagen = e.imagen || '';
+                    const pos = e.modelos_positivos || 1;
+                    const tot = e.modelos_totales || 3;
+                    const badgeClass = pct >= 70 ? 'bg-red-600/20 text-red-400 border-red-500/30' : 'bg-zinc-800 text-zinc-300 border-zinc-700';
+                    const botonFoto = imagen ? `<button onclick="abrirModal('${imagen}')" class="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded text-xs transition border border-zinc-700">Ver</button>` : '';
+
+                    return `
+                        <div class="p-3 hover:bg-[#181a20] transition flex items-center justify-between gap-3">
+                            <div class="space-y-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="font-mono text-xs font-medium text-zinc-200">${hora}</span>
+                                    <span class="px-1.5 py-0.2 rounded text-[10px] font-mono font-bold border ${badgeClass}">
+                                        ${pct}%
+                                    </span>
+                                </div>
+                                <div class="text-[11px] text-zinc-400 font-mono">
+                                    ${pos} de ${tot} modelos confirmaron
+                                </div>
+                            </div>
+                            ${botonFoto}
+                        </div>
+                    `;
+                }).join('');
+            } catch (err) {
+                console.error("Error al cargar eventos:", err);
+            }
+        }
+
+        async function cargarCapturas() {
+            try {
+                const res = await fetch('/api/capturas');
+                const fotos = await res.json();
+                const grid = document.getElementById('grid-capturas');
+                totalCapturas = fotos.length;
+
+                if (tabActual === 'capturas') {
+                    document.getElementById('txt-contador-tab').textContent = `${totalCapturas} fotos`;
+                }
+
+                if (fotos.length === 0) {
+                    grid.innerHTML = '<div class="col-span-2 py-8 text-center text-zinc-500 text-xs font-mono">Sin capturas almacenadas en disco.</div>';
+                    return;
+                }
+
+                grid.innerHTML = fotos.map(f => {
+                    const fecha = (f.fecha || '').substring(11, 19) || f.archivo.substring(0, 15);
+                    return `
+                        <div onclick="abrirModal('${f.archivo}')" class="group bg-[#181a20] border border-borderbg hover:border-red-600/80 rounded transition cursor-pointer overflow-hidden flex flex-col">
+                            <img src="/capturas/${f.archivo}" class="w-full h-24 object-cover group-hover:scale-105 transition duration-300" loading="lazy">
+                            <div class="p-1.5 text-[10px] font-mono border-t border-borderbg bg-cardfooter flex justify-between items-center">
+                                <span class="text-zinc-300 truncate">${fecha}</span>
+                                <span class="text-zinc-500">${f.tamano_kb}KB</span>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            } catch (err) {
+                console.error("Error al cargar capturas:", err);
+            }
+        }
+
+        async function actualizarTelemetria() {
+            try {
+                const res = await fetch('/api/estado');
+                const data = await res.json();
+                if (data.temperatura) document.getElementById('txt-temp').textContent = data.temperatura;
+                if (data.memoria) document.getElementById('txt-ram').textContent = `${data.memoria.usada} (${data.memoria.pct}%)`;
+            } catch (e) {}
+        }
+
+        function abrirModal(imagen) {
+            document.getElementById('modal-titulo').textContent = imagen;
+            document.getElementById('modal-img').src = '/capturas/' + imagen;
+            const modal = document.getElementById('modal-foto');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function cerrarModal() {
+            const modal = document.getElementById('modal-foto');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        // Reloj OSD
+        setInterval(() => {
+            const now = new Date();
+            const str = now.toISOString().replace('T', ' ').substring(0, 19);
+            const el = document.getElementById('osd-clock');
+            if (el) el.textContent = str;
+        }, 1000);
+
+        // Inicialización
+        cargarEventos();
+        cargarCapturas();
+        setInterval(cargarEventos, 7000);
+        setInterval(actualizarTelemetria, 5000);
+    </script>
+</body>
+</html>
