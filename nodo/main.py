@@ -8,6 +8,8 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from logging.handlers import RotatingFileHandler
+
 import camara
 import config as C
 import registro
@@ -16,6 +18,16 @@ from detector import NOMBRES, Detector
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 log = logging.getLogger("nodo")
+
+# Registro en archivo compartido para visualización en el Dashboard
+LOG_PATH = Path("/datos/sensor.log")
+try:
+    LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _fh = RotatingFileHandler(str(LOG_PATH), maxBytes=300_000, backupCount=2, encoding="utf-8")
+    _fh.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
+    logging.getLogger().addHandler(_fh)
+except Exception as _e:
+    log.warning("No se pudo iniciar el archivo de logs compartido: %s", _e)
 
 lock = threading.Lock()
 stop = threading.Event()
@@ -61,10 +73,11 @@ def procesar_evento_pir():
 
         pos = [r for r in res if r["positivo"]]
         hora = datetime.now().strftime("%H:%M:%S")
-        log.info("Captura procesada %s: %d/%d modelos positivos", ruta.name, len(pos), len(res))
+        max_conf = max((r["confianza"] for r in res), default=0.0)
+        log.info("Captura procesada %s: %d/%d modelos positivos (máx confianza IA: %.1f%%)", ruta.name, len(pos), len(res), max_conf * 100)
 
         if len(pos) < C.MIN_POSITIVOS:
-            Estado.ultimo_texto = f"{hora} - Movimiento descartado (sin persona)."
+            Estado.ultimo_texto = f"{hora} - Movimiento detectado pero descartado (IA: {max_conf:.0%}, sin persona)."
             return
 
         if time.time() - Estado.ultima_alerta < C.COOLDOWN_ALERTA:
@@ -195,17 +208,24 @@ def main():
         t0 = time.time()
         while pir.value == 1 and time.time() - t0 < 30 and not stop.is_set():
             time.sleep(0.5)
+        log.info("Sensor PIR estabilizado y activo para monitoreo.")
 
-        en_episodio, capturado, t_ini = False, False, 0.0
-        while not stop.wait(0.1):
+        en_episodio = False
+        ultima_captura = 0.0
+
+        while not stop.wait(0.05):
             v = pir.value
             if v and not en_episodio:
-                en_episodio, capturado, t_ini = True, False, time.time()
-                log.info("PIR: Inicio de movimiento detectado")
-            elif v and en_episodio and not capturado and (time.time() - t_ini >= C.MIN_SEGUNDOS):
+                en_episodio = True
+                log.info("PIR: Movimiento detectado (flanco de subida)")
+                ahora = time.time()
                 if Estado.activo:
-                    capturado = True
-                    procesar_evento_pir()
+                    if ahora - ultima_captura >= C.MIN_SEGUNDOS:
+                        ultima_captura = ahora
+                        # Disparar captura y análisis de inmediato en hilo independiente
+                        threading.Thread(target=procesar_evento_pir, daemon=True).start()
+                    else:
+                        log.info("Captura en pausa por intervalo mínimo (%.1fs restantes)", C.MIN_SEGUNDOS - (ahora - ultima_captura))
             elif not v and en_episodio:
                 en_episodio = False
                 log.info("PIR: Fin de movimiento")

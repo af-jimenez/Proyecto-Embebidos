@@ -122,6 +122,9 @@
                         <button id="tab-btn-capturas" onclick="cambiarTab('capturas')" class="px-3 py-2.5 border-b-2 border-transparent text-zinc-400 hover:text-zinc-200 font-medium tracking-wide uppercase text-xs transition">
                             Capturas
                         </button>
+                        <button id="tab-btn-logs" onclick="cambiarTab('logs')" class="px-3 py-2.5 border-b-2 border-transparent text-zinc-400 hover:text-zinc-200 font-medium tracking-wide uppercase text-xs transition">
+                            Logs
+                        </button>
                     </div>
                     <span id="txt-contador-tab" class="font-mono text-[11px] text-zinc-400 pr-2">Cargando...</span>
                 </div>
@@ -149,6 +152,22 @@
                     <div class="px-4 py-2 bg-cardfooter border-t border-borderbg text-[11px] font-mono text-zinc-500 flex justify-between items-center">
                         <span>Almacenamiento local RPi</span>
                         <button onclick="cargarCapturas()" class="text-zinc-400 hover:text-zinc-200 text-[11px] font-mono">
+                            Actualizar
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Panel 3: Terminal de Logs del Sensor en Tiempo Real -->
+                <div id="panel-logs" class="hidden flex-col">
+                    <div id="contenedor-logs" class="p-3 bg-[#0a0a0d] font-mono text-[11px] leading-relaxed max-h-[460px] min-h-[350px] overflow-y-auto custom-scroll text-zinc-300 space-y-1 select-text">
+                        <div class="text-zinc-500">Cargando registros del sensor...</div>
+                    </div>
+                    <div class="px-4 py-2 bg-cardfooter border-t border-borderbg text-[11px] font-mono text-zinc-500 flex justify-between items-center">
+                        <span class="flex items-center gap-1.5">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                            Logs en tiempo real
+                        </span>
+                        <button onclick="cargarLogs()" class="text-zinc-400 hover:text-zinc-200 text-[11px] font-mono">
                             Actualizar
                         </button>
                     </div>
@@ -186,23 +205,31 @@
             tabActual = tab;
             const btnInc = document.getElementById('tab-btn-incidentes');
             const btnCap = document.getElementById('tab-btn-capturas');
+            const btnLogs = document.getElementById('tab-btn-logs');
             const pnlInc = document.getElementById('panel-incidentes');
             const pnlCap = document.getElementById('panel-capturas');
+            const pnlLogs = document.getElementById('panel-logs');
             const contador = document.getElementById('txt-contador-tab');
 
+            const activo = 'px-3 py-2.5 border-b-2 border-red-600 font-semibold text-white tracking-wide uppercase text-xs transition';
+            const inactivo = 'px-3 py-2.5 border-b-2 border-transparent text-zinc-400 hover:text-zinc-200 font-medium tracking-wide uppercase text-xs transition';
+
+            btnInc.className = tab === 'incidentes' ? activo : inactivo;
+            btnCap.className = tab === 'capturas' ? activo : inactivo;
+            btnLogs.className = tab === 'logs' ? activo : inactivo;
+
+            pnlInc.classList.toggle('hidden', tab !== 'incidentes');
+            pnlCap.classList.toggle('hidden', tab !== 'capturas');
+            pnlLogs.classList.toggle('hidden', tab !== 'logs');
+
             if (tab === 'incidentes') {
-                btnInc.className = 'px-3 py-2.5 border-b-2 border-red-600 font-semibold text-white tracking-wide uppercase text-xs transition';
-                btnCap.className = 'px-3 py-2.5 border-b-2 border-transparent text-zinc-400 hover:text-zinc-200 font-medium tracking-wide uppercase text-xs transition';
-                pnlInc.classList.remove('hidden');
-                pnlCap.classList.add('hidden');
                 contador.textContent = `${totalEventos} registrados`;
-            } else {
-                btnCap.className = 'px-3 py-2.5 border-b-2 border-red-600 font-semibold text-white tracking-wide uppercase text-xs transition';
-                btnInc.className = 'px-3 py-2.5 border-b-2 border-transparent text-zinc-400 hover:text-zinc-200 font-medium tracking-wide uppercase text-xs transition';
-                pnlCap.classList.remove('hidden');
-                pnlInc.classList.add('hidden');
+            } else if (tab === 'capturas') {
                 contador.textContent = `${totalCapturas} fotos`;
                 cargarCapturas();
+            } else if (tab === 'logs') {
+                contador.textContent = 'En vivo';
+                cargarLogs();
             }
         }
 
@@ -359,6 +386,48 @@
             modal.classList.remove('flex');
         }
 
+        async function cargarLogs() {
+            try {
+                const res = await fetch('/api/logs');
+                const data = await res.json();
+                const contenedor = document.getElementById('contenedor-logs');
+                const lineas = data.logs || [];
+
+                if (tabActual === 'logs') {
+                    document.getElementById('txt-contador-tab').textContent = `${lineas.length} registros`;
+                }
+
+                if (lineas.length === 0) {
+                    contenedor.innerHTML = '<div class="text-zinc-500">Sin registros recientes aún.</div>';
+                    return;
+                }
+
+                contenedor.innerHTML = lineas.map(l => {
+                    let colorClase = 'text-zinc-300';
+                    if (l.includes('Movimiento detectado') || l.includes('flanco de subida')) {
+                        colorClase = 'text-amber-400 font-semibold';
+                    } else if (l.includes('Fin de movimiento')) {
+                        colorClase = 'text-zinc-500';
+                    } else if (l.includes('ALERTA') || l.includes('PERSONA DETECTADA') || (l.includes('modelos positivos') && !l.includes('0/3'))) {
+                        colorClase = 'text-red-400 font-bold bg-red-950/40 px-1 rounded';
+                    } else if (l.includes('0/3 modelos') || l.includes('descartado')) {
+                        colorClase = 'text-zinc-400';
+                    } else if (l.includes('Captura exitosa')) {
+                        colorClase = 'text-sky-300';
+                    } else if (l.includes('Comando Telegram')) {
+                        colorClase = 'text-purple-300 font-medium';
+                    }
+
+                    const limpio = l.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    return `<div class="${colorClase}">${limpio}</div>`;
+                }).join('');
+
+                contenedor.scrollTop = contenedor.scrollHeight;
+            } catch (e) {
+                console.error("Error al cargar logs:", e);
+            }
+        }
+
         // Reloj OSD
         setInterval(() => {
             const now = new Date();
@@ -372,6 +441,9 @@
         cargarCapturas();
         setInterval(cargarEventos, 7000);
         setInterval(actualizarTelemetria, 5000);
+        setInterval(() => {
+            if (tabActual === 'logs') cargarLogs();
+        }, 3000);
     </script>
 </body>
 </html>

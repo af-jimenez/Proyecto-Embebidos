@@ -17,8 +17,9 @@ def capturar(ruta, intentos=3):
     for n in range(1, intentos + 1):
         try:
             r = subprocess.run(cmd, capture_output=True, text=True, timeout=25)
-            if Path(ruta).exists() and Path(ruta).stat().st_size > 0:
-                log.info("Captura exitosa en %s (intento %d)", ruta.name, n)
+            p = Path(ruta)
+            if p.exists() and p.stat().st_size > 0:
+                log.info("Captura exitosa en %s (intento %d)", p.name, n)
                 return True
             log.warning("Intento %d sin imagen válida: %s", n, r.stderr.strip()[-200:])
         except subprocess.TimeoutExpired:

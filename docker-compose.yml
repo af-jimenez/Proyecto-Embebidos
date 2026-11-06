@@ -7,6 +7,7 @@ services:
     privileged: true
     network_mode: host
     volumes:
+      - ./nodo:/app
       - ./modelos:/modelos:ro
       - ./datos:/datos
       - /sys/class/thermal:/sys/class/thermal:ro
@@ -25,7 +26,7 @@ services:
     restart: unless-stopped
     network_mode: host
     volumes:
-      - ./dashboard/templates:/app/templates:ro
+      - ./dashboard:/app
       - ./datos:/datos:ro
       - /sys/class/thermal:/sys/class/thermal:ro
       - /proc/meminfo:/proc/meminfo:ro

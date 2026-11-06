@@ -209,6 +209,19 @@ async def api_capturas():
         "fecha": datetime.fromtimestamp(a.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S")
     } for a in archivos[:40]]
 
+@app.get("/api/logs")
+async def api_logs():
+    """Devuelve las últimas líneas del registro del sensor en tiempo real."""
+    log_file = Path("/datos/sensor.log")
+    if not log_file.exists():
+        return {"logs": ["Esperando eventos del sensor PIR..."]}
+    try:
+        with open(log_file, "r", encoding="utf-8", errors="replace") as f:
+            lineas = [l.strip() for l in f.readlines() if l.strip()]
+            return {"logs": lineas[-80:]}
+    except Exception as e:
+        return {"logs": [f"Error al leer logs: {str(e)}"]}
+
 @app.get("/capturas/{nombre}")
 async def servir_captura(nombre: str):
     """Entrega la imagen fotográfica solicitada."""
